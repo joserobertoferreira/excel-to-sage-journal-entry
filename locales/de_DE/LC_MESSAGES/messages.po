@@ -1,0 +1,70 @@
+# German (Germany) translations for PROJECT.
+# Copyright (C) 2025 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2025.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2025-11-23 16:54+0000\n"
+"PO-Revision-Date: 2025-11-23 16:56+0000\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: de_DE\n"
+"Language-Team: de_DE <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.17.0\n"
+
+#: main.py:29
+msgid "The data table is empty."
+msgstr "Die Datentabelle ist leer."
+
+#: main.py:29
+msgid "Warning"
+msgstr "Warnung"
+
+#: main.py:47
+#, python-brace-format
+msgid "Creation process completed! {num_groups} groups sent."
+msgstr "Erstellungsprozess abgeschlossen! {num_groups} Gruppen wurden gesendet."
+
+#: main.py:49
+msgid "Success"
+msgstr "Erfolg"
+
+#: main.py:56
+msgid "Functionality not yet implemented."
+msgstr "Funktionalität noch nicht implementiert."
+
+#: main.py:56
+msgid "Information"
+msgstr "Information"
+
+#: main.py:88
+msgid "Error"
+msgstr "Fehler"
+
+#: main.py:100
+#, python-brace-format
+msgid ""
+"An unexpected error occurred. Please check the 'logs' folder for details."
+"\n"
+"\n"
+"Error: {error}"
+msgstr ""
+"Ein unerwarteter Fehler ist aufgetreten. Bitte prüfen Sie den Ordner 'logs' für weitere Details.\n"
+"\n"
+"Fehler: {error}"
+
+#: main.py:102
+msgid "Critical Error"
+msgstr "Kritischer Fehler"
+
+#: main.py:107
+#, python-brace-format
+msgid ""
+"An unexpected error occurred before connecting to Excel. Please check the"
+"

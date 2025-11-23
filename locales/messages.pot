@@ -1,0 +1,88 @@
+# Translations template for PROJECT.
+# Copyright (C) 2025 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2025.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2025-11-23 16:54+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.17.0\n"
+
+#: main.py:29
+msgid "The data table is empty."
+msgstr ""
+
+#: main.py:29
+msgid "Warning"
+msgstr ""
+
+#: main.py:47
+#, python-brace-format
+msgid "Creation process completed! {num_groups} groups sent."
+msgstr ""
+
+#: main.py:49
+msgid "Success"
+msgstr ""
+
+#: main.py:56
+msgid "Functionality not yet implemented."
+msgstr ""
+
+#: main.py:56
+msgid "Information"
+msgstr ""
+
+#: main.py:88
+msgid "Error"
+msgstr ""
+
+#: main.py:100
+#, python-brace-format
+msgid ""
+"An unexpected error occurred. Please check the 'logs' folder for details."
+"\n"
+"\n"
+"Error: {error}"
+msgstr ""
+
+#: main.py:102
+msgid "Critical Error"
+msgstr ""
+
+#: main.py:107
+#, python-brace-format
+msgid ""
+"An unexpected error occurred before connecting to Excel. Please check the"
+" 'logs' folder for details.\n"
+"\n"
+"Error: {error}"
+msgstr ""
+
+#: core/handler/excel_handler.py:199
+msgid "ERROR"
+msgstr ""
+
+#: core/handler/excel_handler.py:199
+msgid "FAILURE"
+msgstr ""
+
+#: core/handler/excel_handler.py:224
+msgid ""
+"Results were written to the sheet, but an error occurred while saving the"
+" file. Please save the file manually."
+msgstr ""
+
+#: core/handler/excel_handler.py:227
+msgid "Error Saving File"
+msgstr ""
+

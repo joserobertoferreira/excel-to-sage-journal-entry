@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>User Guide</title>
+</head>
+
+<body>
+  <table style="width:100%; border-collapse: collapse;">
+    <tr>
+      <td style="font-family: Calibri, Arial, sans-serif; font-size: 11pt; vertical-align: top;">
+        <h1 style="font-size: 18pt; color: #2E74B5; border-bottom: 2px solid #BFBFBF; padding-bottom: 5px;">User Guide -
+          Journal Entry Tool</h1>
+        <p>Please follow these steps carefully to ensure the tool functions correctly.</p>
+
+        <h3 style="font-size: 14pt; color: #3A3A3A; border-bottom: 1px solid #BFBFBF; padding-bottom: 3px;">1.
+          First-Time Setup: Generating and Configuring Credentials</h3>
+        <p>Before using the tool for the first time, you need to generate and configure your API access credentials.</p>
+        <ol>
+          <li><b>Generate Credentials:</b> Access the following URL in your browser:
+            <code>[INSERT YOUR PUBLIC API URL HERE]</code></li>
+          <li>Follow the instructions on the page to generate your personal credentials. You will be provided with three
+            values: <code>APP_KEY</code>, <code>CLIENT_ID</code>, and <code>API_SECRET</code>. Copy these three values.
+          </li>
+          <li><b>Configure the Tool:</b> In the same folder where the Excel file is located, you will find a file named
+            <b><code>config.ini</code></b>.</li>
+          <li>Open <code>config.ini</code> with Notepad or another text editor.</li>
+          <li>Paste the values you copied into the corresponding fields.</li>
+          <li>Save and close the <code>config.ini</code> file. This step only needs to be done once.</li>
+        </ol>
+
+        <h3 style="font-size: 14pt; color: #3A3A3A; border-bottom: 1px solid #BFBFBF; padding-bottom: 3px;">2. Preparing
+          Your Working File</h3>
+        <ol>
+          <li>Open the template file <b><code>journal_entry_template.xlsm</code></b>.</li>
+          <li>Immediately, go to the <b>File > Save As</b> menu.</li>
+          <li>Choose a location and give your file a name (e.g., <code>Journal_Entries_November_2025</code>).</li>
+          <li><b>MOST IMPORTANT STEP:</b> In the <b>"Save as type"</b> field, make sure the option <b>"Excel
+              Macro-Enabled Workbook (*.xlsm)"</b> is selected.</li>
+          <li>Click <b>Save</b>.</li>
+        </ol>
+        <div
+          style="background-color: #FFFBE6; border-left: 4px solid #FFC107; padding: 10px 15px; margin-top: 10px; margin-bottom: 15px;">
+          <b>WARNING:</b> If you save the file as a standard <code>.xlsx</code> workbook, the automation buttons will
+          stop working. The file <b>must</b> always be an <code>.xlsm</code> type.
+        </div>
+
+        <h3 style="font-size: 14pt; color: #3A3A3A; border-bottom: 1px solid #BFBFBF; padding-bottom: 3px;">3. Filling
+          in the Data</h3>
+        <p>Fill in the spreadsheet rows with the journal entry data.</p>
+        <ul>
+          <li><b>Automatic Grouping:</b> To have the system group entries automatically, leave the
+            <b><code>Group By</code></b> column empty.</li>
+          <li><b>Manual Grouping:</b> To define your own groups, enter an identifier (e.g., "A", "GROUP1") in the first
+            row of each new group in the <b><code>Group By</code></b> column.</li>
+        </ul>
+
+        <h3 style="font-size: 14pt; color: #3A3A3A; border-bottom: 1px solid #BFBFBF; padding-bottom: 3px;">4. Running
+          the Tool</h3>
+        <ol>
+          <li>Ensure that the <b><code>SageJournalEntry.exe</code></b> program and the <b><code>config.ini</code></b>
+            file are in the same folder as your <code>.xlsm</code> file.</li>
+          <li>Click the <b>"Create entries"</b> button to validate and send the data to the API.</li>
+          <li>Wait for the "Success" or "Error" message. The <code>Document</code>, <code>Status</code>, and
+            <code>Warning</code> columns will be updated automatically.</li>
+          <li>(Optional) After an entry has been created, you can use the <b>"Update status"</b> button to update the
+            status of existing documents.</li>
+        </ol>
+      </td>
+    </tr>
+  </table>
+</body>
+
+</html>

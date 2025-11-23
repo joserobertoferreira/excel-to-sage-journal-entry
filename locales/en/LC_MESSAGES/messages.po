@@ -1,0 +1,99 @@
+# English translations for PROJECT.
+# Copyright (C) 2025 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2025.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2025-11-23 16:54+0000\n"
+"PO-Revision-Date: 2025-11-23 17:14+0000\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: en\n"
+"Language-Team: en <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.17.0\n"
+
+#: main.py:29
+msgid "The data table is empty."
+msgstr "The data table is empty."
+
+#: main.py:29
+msgid "Warning"
+msgstr "Warning"
+
+#: main.py:47
+#, python-brace-format
+msgid "Creation process completed! {num_groups} groups sent."
+msgstr "Creation process completed! {num_groups} groups sent."
+
+#: main.py:49
+msgid "Success"
+msgstr "Success"
+
+#: main.py:56
+msgid "Functionality not yet implemented."
+msgstr "Functionality not yet implemented."
+
+#: main.py:56
+msgid "Information"
+msgstr "Information"
+
+#: main.py:88
+msgid "Error"
+msgstr "Error"
+
+#: main.py:100
+#, python-brace-format
+msgid ""
+"An unexpected error occurred. Please check the 'logs' folder for details."
+"\n"
+"\n"
+"Error: {error}"
+msgstr ""
+"An unexpected error occurred. Please check the 'logs' folder for details."
+"\n"
+"\n"
+"Error: {error}"
+
+#: main.py:102
+msgid "Critical Error"
+msgstr "Critical Error"
+
+#: main.py:107
+#, python-brace-format
+msgid ""
+"An unexpected error occurred before connecting to Excel. Please check the"
+" 'logs' folder for details.\n"
+"\n"
+"Error: {error}"
+msgstr ""
+"An unexpected error occurred before connecting to Excel. Please check the"
+" 'logs' folder for details.\n"
+"\n"
+"Error: {error}"
+
+#: core/handler/excel_handler.py:199
+msgid "ERROR"
+msgstr "ERROR"
+
+#: core/handler/excel_handler.py:199
+msgid "FAILURE"
+msgstr "FAILURE"
+
+#: core/handler/excel_handler.py:224
+msgid ""
+"Results were written to the sheet, but an error occurred while saving the"
+" file. Please save the file manually."
+msgstr ""
+"Results were written to the sheet, but an error occurred while saving the"
+" file. Please save the file manually."
+
+#: core/handler/excel_handler.py:227
+msgid "Error Saving File"
+msgstr "Error Saving File"
+

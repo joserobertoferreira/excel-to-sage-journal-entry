@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Guia do Utilizador</title>
+</head>
+
+<body>
+  <table style="width:100%; border-collapse: collapse;">
+    <tr>
+      <td style="font-family: Calibri, Arial, sans-serif; font-size: 11pt; vertical-align: top;">
+        <h1 style="font-size: 18pt; color: #2E74B5; border-bottom: 2px solid #BFBFBF; padding-bottom: 5px;">Guia do
+          Utilizador - Ferramenta de Lançamento Contabilístico</h1>
+        <p>Siga estes passos cuidadosamente para garantir o funcionamento correto da ferramenta.</p>
+
+        <h3 style="font-size: 14pt; color: #3A3A3A; border-bottom: 1px solid #BFBFBF; padding-bottom: 3px;">1.
+          Configuração Inicial (Apenas na Primeira Utilização)</h3>
+        <p>Antes de usar a ferramenta pela primeira vez, precisa de gerar e configurar as suas credenciais de acesso à
+          API.</p>
+        <ol>
+          <li><b>Gerar Credenciais:</b> Aceda ao seguinte endereço no seu navegador:
+            <code>[COLOQUE AQUI O URL PÚBLICO DA SUA API]</code></li>
+          <li>Siga as instruções na página para gerar as suas credenciais pessoais. Ser-lhe-ão fornecidos três valores:
+            <code>APP_KEY</code>, <code>CLIENT_ID</code>, e <code>API_SECRET</code>. Copie estes três valores.</li>
+          <li><b>Configurar a Ferramenta:</b> Na mesma pasta onde está o ficheiro Excel, encontrará um ficheiro chamado
+            <b><code>config.ini</code></b>.</li>
+          <li>Abra o <code>config.ini</code> com o Bloco de Notas ou outro editor de texto.</li>
+          <li>Cole os valores que copiou nos campos correspondentes.</li>
+          <li>Guarde e feche o ficheiro <code>config.ini</code>. Este passo só precisa de ser feito uma vez.</li>
+        </ol>
+
+        <h3 style="font-size: 14pt; color: #3A3A3A; border-bottom: 1px solid #BFBFBF; padding-bottom: 3px;">2.
+          Preparação do Ficheiro de Trabalho</h3>
+        <ol>
+          <li>Abra o ficheiro modelo <b><code>journal_entry_template.xlsm</code></b>.</li>
+          <li>Imediatamente, vá ao menu <b>Ficheiro > Guardar Como</b>.</li>
+          <li>Escolha um local e dê um nome ao seu ficheiro (ex: <code>Lancamentos_Novembro_2025</code>).</li>
+          <li><b>PASSO MAIS IMPORTANTE:</b> No campo <b>"Tipo"</b>, certifique-se de que a opção <b>"Livro do Excel
+              Ativado com Macros (*.xlsm)"</b> está selecionada.</li>
+          <li>Clique em <b>Guardar</b>.</li>
+        </ol>
+        <div
+          style="background-color: #FFFBE6; border-left: 4px solid #FFC107; padding: 10px 15px; margin-top: 10px; margin-bottom: 15px;">
+          <b>AVISO:</b> Se guardar o ficheiro como um <code>.xlsx</code> normal, os botões de automação deixarão de
+          funcionar. O ficheiro <b>deve</b> ser sempre do tipo <code>.xlsm</code>.
+        </div>
+
+        <h3 style="font-size: 14pt; color: #3A3A3A; border-bottom: 1px solid #BFBFBF; padding-bottom: 3px;">3.
+          Preenchimento dos Dados</h3>
+        <p>Preencha as linhas da folha de cálculo com os dados do lançamento.</p>
+        <ul>
+          <li><b>Agrupamento Automático:</b> Para que o sistema agrupe os lançamentos automaticamente, deixe a coluna
+            <b><code>Group By</code></b> vazia.</li>
+          <li><b>Agrupamento Manual:</b> Para definir os seus próprios grupos, insira um identificador (ex: "A",
+            "GRUPO1") na primeira linha de cada novo grupo na coluna <b><code>Group By</code></b>.</li>
+        </ul>
+
+        <h3 style="font-size: 14pt; color: #3A3A3A; border-bottom: 1px solid #BFBFBF; padding-bottom: 3px;">4. Execução
+          da Ferramenta</h3>
+        <ol>
+          <li>Certifique-se de que os programas <b><code>SageJournalEntry.exe</code></b> e
+            <b><code>config.ini</code></b> estão na mesma pasta que o seu ficheiro <code>.xlsm</code>.</li>
+          <li>Clique no botão <b>"Create entries"</b> para validar e enviar os dados para a API.</li>
+          <li>Aguarde a mensagem de "Success" ou "Error". As colunas <code>Document</code>, <code>Status</code> e
+            <code>Warning</code> serão atualizadas automaticamente.</li>
+          <li>(Opcional) Após a criação de um lançamento, pode usar o botão <b>"Update status"</b> para atualizar o
+            estado dos documentos existentes.</li>
+        </ol>
+      </td>
+    </tr>
+  </table>
+</body>
+
+</html>
