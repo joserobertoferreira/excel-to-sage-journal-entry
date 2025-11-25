@@ -4,9 +4,12 @@ from typing import Any
 
 import pandas as pd
 import requests
+from requests.exceptions import HTTPError, RequestException
 
 from core.auth.auth import generate_auth_headers
-from core.config.settings import DIMENSIONS_MAPPING, PRIMARY_GROUP_COLUMN, SERVER_BASE_ADDRESS
+from core.config.config import Config
+from core.config.i18n import _
+from core.config.settings import BASE_DIR, DIMENSIONS_MAPPING, PRIMARY_GROUP_COLUMN
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +19,12 @@ class ApiService:
     Serviço para interagir com a API externa.
     """
 
-    def __init__(self):
-        logger.info('Inicializar ApiService...')
+    def __init__(self, config: Config):
+        logger.info(_('Start ApiService...'))
 
-        self.api_url = SERVER_BASE_ADDRESS
+        self.config = config
+        self.api_url = config.SERVER_BASE_ADDRESS
+        self.base_dir = BASE_DIR
         self.dimensions = DIMENSIONS_MAPPING
 
     def _create_dimensions(self, row: pd.Series) -> dict:
@@ -118,40 +123,29 @@ class ApiService:
             }
         }
 
-    def _build_graphql_input(self, group_df: pd.DataFrame) -> dict:
-        """
-        Constrói o dicionário do input para a mutação GraphQL a partir de um grupo de dados (DataFrame).
-        Args:
-            group_df (pd.DataFrame): DataFrame contendo os dados do grupo.
-        Returns:
-            dict: O dicionário do input para a mutação GraphQL.
-        """
-
-        # Pega os dados da primeira linha, pois já foram validados e preenchidos
-        header_data = group_df.iloc[0]
-
-        # Constrói a lista de linhas para a mutação
-        lines_list = [self._create_line_item(row, header_data) for _, row in group_df.iterrows()]
-
-        # Constrói o objeto 'input' principal
-        variables = {
-            'input': {
-                'site': header_data['Site'].upper(),
-                'documentType': header_data['Entry Type'].upper(),
-                'accountingDate': pd.to_datetime(header_data['AccountingDate']).strftime('%Y-%m-%d'),
-                'descriptionByDefault': header_data['Header Description'],
-                'sourceCurrency': header_data['Curr'].upper(),
-                'reference': header_data['Reference'],
-                'lines': lines_list,
-            }
-        }
-        return variables
-
-    def _execute_graphql(self, query: str, variables: dict[str, Any], operation_name: str) -> dict:
+    def _execute_graphql(
+        self,
+        query: str,
+        variables: dict[str, Any],
+        operation_name: str,
+        authorization: bool = True,
+        excel: bool = False,
+    ) -> dict:
         """
         Executa uma query/mutação GraphQL genérica e trata a comunicação e os erros.
+        Args:
+            query (str): A query ou mutação GraphQL.
+            variables (dict): As variáveis para a operação.
+            operation_name (str): O nome da operação GraphQL.
+            authorization (bool): Indica se deve incluir cabeçalhos de autorização.
+            excel (bool): Indica se deve usar credenciais de administrador.
+        Returns:
+            dict: A resposta da API em formato JSON.
+        Raises:
+            HTTPError: Em caso de erro HTTP.
+            RequestException: Em caso de falha de rede ou erro HTTP.
         """
-        logger.info(f"A executar operação GraphQL: '{operation_name}'...")
+        logger.info(_('Execute GraphQL API: "{operation_name}"...').format(operation_name=operation_name))
 
         payload = {
             'operationName': operation_name,
@@ -159,23 +153,38 @@ class ApiService:
             'variables': variables,
         }
 
-        auth_headers = generate_auth_headers()
+        if authorization:
+            auth_headers = generate_auth_headers(config=self.config, admin=excel)
+        else:
+            auth_headers = {'content-type': 'application/json', 'Accept': '*/*'}
 
-        logger.debug('Payload GraphQL: %s', json.dumps(payload, indent=2))
+        # logger.info('Payload GraphQL: %s', json.dumps(payload, indent=2))
 
         try:
             response = requests.post(self.api_url, headers=auth_headers, data=json.dumps(payload), timeout=60)
             response.raise_for_status()
             return response.json()
 
-        except requests.exceptions.HTTPError as http_err:
-            logger.error(f"Erro HTTP na operação '{operation_name}': {http_err}. Resposta: {http_err.response.text}")
+        except HTTPError as http_err:
+            logger.error(
+                _('HTTP error in operation "{operation_name}": {http_err}. Response: {response_text}').format(
+                    operation_name=operation_name, http_err=http_err, response_text=http_err.response.text
+                )
+            )
             # Retorna uma estrutura de erro consistente do GraphQL
-            return {'errors': [{'message': f'Erro {http_err.response.status_code}. Ver logs.'}]}
+            error_message = _('HTTP error {http_err.response.status_code} occurred. Check logs.').format(
+                http_err=http_err
+            )
+            return {'errors': [{'message': error_message}]}
 
-        except requests.exceptions.RequestException as req_err:
-            logger.error(f"Erro de rede na operação '{operation_name}': {req_err}")
-            return {'errors': [{'message': 'Erro de rede. Verifique a conexão com a API.'}]}
+        except RequestException as req_err:
+            logger.error(
+                _('Network error in operation "{operation_name}": {req_err}').format(
+                    operation_name=operation_name, req_err=req_err
+                )
+            )
+            error_message = _('Network error. Please check the API connection.')
+            return {'errors': [{'message': error_message}]}
 
     def create_journal_entry(self, group_df: pd.DataFrame) -> dict:
         """
@@ -186,12 +195,9 @@ class ApiService:
 
         Returns:
             dict: A resposta da API em formato JSON.
-
-        Raises:
-            requests.exceptions.RequestException: Em caso de falha de rede ou erro HTTP.
         """
-        group_id = group_df.iloc[0].get(PRIMARY_GROUP_COLUMN, 'desconhecido')
-        logger.info(f"A criar lançamento para o grupo '{group_id}'...")
+        group_id = group_df.iloc[0].get(PRIMARY_GROUP_COLUMN, _('unknown'))
+        logger.info(_('Create journal entry for group "{group_id}"...').format(group_id=group_id))
 
         # Construir a mutação GraphQL
         query = """
@@ -213,7 +219,13 @@ class ApiService:
             return {'success': False, 'error': '; '.join(error_messages)}
 
         result = response_data.get('data', {}).get('createJournalEntry', {})
-        logger.info(f"Grupo '{group_id}' enviado com sucesso. Documento: {result.get('journalEntryNumber')}")
+
+        logger.info(
+            _('Group "{group_id}" successfully sent. Document: {document_number}').format(
+                group_id=group_id, document_number=result.get('journalEntryNumber')
+            )
+        )
+
         return {
             'success': True,
             'document': result.get('journalEntryNumber'),
@@ -222,7 +234,7 @@ class ApiService:
 
     def get_journal_statuses(self, document_numbers: list[str]) -> dict:
         """Busca o status de uma lista de documentos."""
-        logger.info(f'A verificar o status para {len(document_numbers)} documentos...')
+        logger.info(_('Checking status for {count} documents...').format(count=len(document_numbers)))
 
         # A sua query de status virá aqui. Exemplo hipotético:
         query = """
@@ -233,6 +245,7 @@ class ApiService:
           }
         }
         """
+
         variables = {'numbers': document_numbers}
 
         response_data = self._execute_graphql(query, variables, 'GetJournalStatuses')
@@ -246,3 +259,122 @@ class ApiService:
         results = response_data.get('data', {}).get('journalEntries', [])
         status_map = {entry['number']: entry['status'] for entry in results}
         return status_map
+
+    def _build_api_credential_input(self, username: str, password: str) -> dict:  # noqa: PLR6301
+        """
+        Constrói o dicionário de variáveis para a mutação CreateApiCredential
+        Args:
+            username (str): O nome de usuário para autenticação.
+            password (str): A senha para autenticação.
+        Returns:
+            dict: O dicionário de variáveis para a mutação GraphQL.
+        """
+
+        return {
+            'input': {
+                'login': username.lower(),
+                'password': password,
+            }
+        }
+
+    def get_api_credentials(self, username: str, password: str) -> dict:
+        """
+        Chama o endpoint de autenticação para gerar as credenciais da API.
+        Args:
+            username (str): O nome de usuário para autenticação.
+            password (str): A senha para autenticação.
+        Returns:
+            dict: Um dicionário contendo as credenciais da API ou mensagens de erro.
+        Raises:
+            HTTPError: Em caso de erro HTTP.
+            RequestException: Em caso de falha de rede ou erro HTTP.
+        """
+        logger.info(_('Attempting to authenticate user: {username}').format(username=username))
+
+        # Construir a mutação GraphQL
+        query = """
+        query GetApiCredential($input: GetApiCredentialInput!) {
+            getApiCredential(input: $input) {
+                appKey
+                appSecret
+                clientId
+                name
+            }
+        }
+        """
+
+        variables = self._build_api_credential_input(username.lower(), password)
+
+        # Executar a query com tratamento de erros
+        response_data = self._execute_graphql(query, variables, 'GetApiCredential', excel=True)
+
+        # Processa a resposta específica desta mutação
+        if 'errors' in response_data:
+            error_messages = [e.get('message') for e in response_data['errors']]
+            return {'success': False, 'error': '; '.join(error_messages)}
+
+        result = response_data.get('data', {}).get('getApiCredential', {})
+
+        required_keys = ['appKey', 'appSecret', 'clientId']
+
+        if not all(key in result for key in required_keys):
+            logger.error(_('Authentication response is missing required keys.'))
+            return {'success': False, 'error': _('Invalid response from authentication server.')}
+
+        app_key = result.get('appKey')
+
+        if app_key is None or not app_key.strip():
+            logger.info(_('Credentials will be generated upon first use.'))
+
+            response_data = self.create_api_credentials(username, password)
+
+            # Processa a resposta específica desta mutação
+            if 'errors' in response_data:
+                error_messages = [e.get('message') for e in response_data['errors']]
+                return {'success': False, 'error': '; '.join(error_messages)}
+
+            result = response_data.get('data', {}).get('createApiCredential', {})
+
+        return {'success': True, **result}
+
+    def create_api_credentials(self, username: str, password: str) -> dict:
+        """
+        Chama o endpoint de criação para gerar as credenciais da API.
+        Args:
+            username (str): O nome de usuário para autenticação.
+            password (str): A senha para autenticação.
+        Returns:
+            dict: Um dicionário contendo as credenciais da API ou mensagens de erro.
+        Raises:
+            HTTPError: Em caso de erro HTTP.
+            RequestException: Em caso de falha de rede ou erro HTTP.
+        """
+        logger.info(_('Create user credentials for user: {username}').format(username=username))
+
+        # Construir a mutação GraphQL
+        query = """
+        mutation CreateApiCredential($input: CreateApiCredentialInput!) {
+            createApiCredential(input: $input) {
+                appKey
+                appSecret
+                clientId
+                name
+            }
+        }
+        """
+
+        variables = self._build_api_credential_input(username.lower(), password)
+
+        # Executar a mutação com tratamento de erros
+        response_data = self._execute_graphql(
+            query, variables, operation_name='CreateApiCredential', authorization=False
+        )
+
+        # Processa a resposta específica desta mutação
+        if 'errors' in response_data:
+            error_messages = [e.get('message') for e in response_data['errors']]
+            return {'success': False, 'error': '; '.join(error_messages)}
+
+        logger.info(_('Credentials for user {username} successfully created').format(username=username.lower()))
+
+        return {'success': True, **response_data}

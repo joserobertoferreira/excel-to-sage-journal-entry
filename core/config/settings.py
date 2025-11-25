@@ -1,65 +1,60 @@
+import logging
 import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from core.utils.utils import load_config_from_env
+logger = logging.getLogger(__name__)
 
-# from decouple import config
+FALLBACK_SERVER_BASE_ADDRESS = 'http://cfg-uks-x3-03:8241/graphql'
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-if getattr(sys, 'frozen', False):
-    # Se sim, o diretório base é a pasta onde o .exe está.
-    BASE_DIR = Path(os.path.dirname(sys.executable))
+IS_FROZEN: bool = getattr(sys, 'frozen', False)
+
+if IS_FROZEN:
+    BASE_DIR: Path = Path(os.path.dirname(sys.executable))
 else:
-    BASE_DIR = Path(__file__).resolve().parent.parent
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent
 
-dotenv_path = BASE_DIR / '.env'
+CONFIG_FILE_PATH: Path = BASE_DIR / 'config.ini'
 
-CONFIG = load_config_from_env(dotenv_path)
-
-# eNvironment variables and settings
-PRODUCTION = CONFIG.get('PRODUCTION', False)
-
-# Debug mode
-DEBUG = CONFIG.get('DEBUG', True)
-
-# API connection parameters
-SERVER_BASE_ADDRESS = str(CONFIG.get('SERVER_BASE_ADDRESS', None))
-API_KEY = str(CONFIG.get('API_KEY', ' '))
-API_SECRET = str(CONFIG.get('API_SECRET', ' '))
-CLIENT_ID = str(CONFIG.get('CLIENT_ID', ' '))
+# Excel API credentials
+EXCEL_API_KEY: str = 'e5b264a9dc550147c2f87ca209003b8594110d87'
+EXCEL_API_SECRET: str = '78b48725ee0fb18f33d737687c8cc0cfd0176b6d15a7677200746890dac78640'
+EXCEL_CLIENT_ID: str = 'B16FB33CC80B40B08F68D58F96EF9E95'
+EXCEL_API_USER: str = 'excel'
+EXCEL_API_PASSWORD: str = 'u4hP68EHyv4sl2bin@^0'
 
 # Logging configuration
-LOG_DIR = BASE_DIR / 'logs'
-LOG_ROOT_LEVEL = 'DEBUG'
-LOG_CONSOLE_LEVEL = 'INFO'
-LOG_INFO_FILE_ENABLED = True
-LOG_INFO_FILENAME = 'app_info.log'
-LOG_INFO_FILE_LEVEL = 'INFO'
-LOG_ERROR_FILE_ENABLED = True
-LOG_ERROR_FILENAME = 'app_error.log'
-LOG_ERROR_FILE_LEVEL = 'ERROR'
-LOG_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
-LOG_BACKUP_COUNT = 5
+LOG_DIR: Path = BASE_DIR / 'logs'
+LOG_ROOT_LEVEL: str = 'DEBUG'
+LOG_CONSOLE_LEVEL: str = 'INFO'
+LOG_INFO_FILE_ENABLED: bool = True
+LOG_INFO_FILENAME: str = 'app_info.log'
+LOG_INFO_FILE_LEVEL: str = 'INFO'
+LOG_ERROR_FILE_ENABLED: bool = True
+LOG_ERROR_FILENAME: str = 'app_error.log'
+LOG_ERROR_FILE_LEVEL: str = 'ERROR'
+LOG_MAX_BYTES: int = 10 * 1024 * 1024  # 10 MB
+LOG_BACKUP_COUNT: int = 5
 
 # Sage X3 database table settings
-DEFAULT_LEGACY_DATE = date(1753, 1, 1)
-DEFAULT_LEGACY_DATETIME = datetime(1753, 1, 1)
+DEFAULT_LEGACY_DATE: date = date(1753, 1, 1)
+DEFAULT_LEGACY_DATETIME: datetime = datetime(1753, 1, 1)
 
 # Excel spreadsheet settings
-START_CELL = 'A'  # The starting cell of the data range
-END_CELL = 'AD'  # The ending cell of the data range
-START_FEEDBACK_CELL = 'B'  # The starting cell of the feedback range
-END_FEEDBACK_CELL = 'D'  # The ending cell of the feedback range
+START_CELL: str = 'A'  # The starting cell of the data range
+END_CELL: str = 'AE'  # The ending cell of the data range
+START_FEEDBACK_CELL: str = 'B'  # The starting cell of the feedback range
+END_FEEDBACK_CELL: str = 'D'  # The ending cell of the feedback range
 
 # Columns used to fill down values and group the data
-PRIMARY_GROUP_COLUMN = 'Group By'
-SECONDARY_GROUP_COLUMNS = ['Site', 'Entry Type', 'AccountingDate', 'Curr']
-GROUPING_COLUMNS = [PRIMARY_GROUP_COLUMN] + SECONDARY_GROUP_COLUMNS
+PRIMARY_GROUP_COLUMN: str = 'Group By'
+SECONDARY_GROUP_COLUMNS: list = ['Site', 'Entry Type', 'AccountingDate', 'Curr']
+GROUPING_COLUMNS: list = [PRIMARY_GROUP_COLUMN] + SECONDARY_GROUP_COLUMNS
 
 # Exact names of all expected columns in the spreadsheet
-EXPECTED_COLUMNS = [
+EXPECTED_COLUMNS: list = [
     'Group By',
     'Document',
     'Status',
@@ -93,7 +88,7 @@ EXPECTED_COLUMNS = [
 ]
 
 # API settings
-DIMENSIONS_MAPPING = {
+DIMENSIONS_MAPPING: dict = {
     'fixture': 'FIX',
     'broker': 'BRK',
     'department': 'DEP',
@@ -104,6 +99,4 @@ DIMENSIONS_MAPPING = {
 }
 
 # Internationalization settings
-LOCALE_DIR = os.path.join(BASE_DIR, 'locales')
-DEFAULT_LANGUAGE = CONFIG.get('DEFAULT_LANGUAGE', 'en')
-SUPPORTED_LANGUAGES = CONFIG.get('SUPPORTED_LANGUAGES', ['en', 'pt_PT'])
+LOCALE_DIR: str = os.path.join(BASE_DIR, 'locales')

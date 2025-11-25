@@ -12,10 +12,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "pyinstaller>=6.16.0",
- "babel>=2.17.0",
-]
+dev = ["pyinstaller>=6.16.0", "babel>=2.17.0"]
 
 [tool.ruff]
 line-length = 120
@@ -27,6 +24,7 @@ select = ['I', 'F', 'E', 'W', 'PL', 'PT']
 # Lista de regras a serem ignoradas em todo o projeto
 ignore = [
   "PLC2701", # Ignora o "Private name import `_`"
+  "PLR2004", # Ignora o "Too few arguments for function call"
 ]
 
 [tool.ruff.format]

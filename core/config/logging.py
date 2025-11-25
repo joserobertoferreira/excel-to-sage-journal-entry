@@ -2,6 +2,8 @@ import logging
 import logging.config
 import os
 
+from core.config.i18n import _
+
 from .settings import (
     LOG_BACKUP_COUNT,
     LOG_CONSOLE_LEVEL,
@@ -84,6 +86,10 @@ def setup_logging():
     }
 
     logging.config.dictConfig(logging_config)
+
+    handlers = ', '.join(root_handlers_list)
     logging.getLogger(__name__).info(
-        f'Logging configurado. Root level: {logging_root_level}. Handlers: {", ".join(root_handlers_list)}'
+        _('Setting up Logging. Root level: {logging_root_level}. Handlers: {handlers}').format(
+            logging_root_level=logging_root_level, handlers=handlers
+        )
     )

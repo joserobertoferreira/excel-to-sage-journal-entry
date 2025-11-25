@@ -3,6 +3,7 @@ import logging
 import numpy as np
 import pandas as pd
 
+from core.config.i18n import _
 from core.config.settings import GROUPING_COLUMNS, PRIMARY_GROUP_COLUMN, SECONDARY_GROUP_COLUMNS
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ class ProcessingService:
 
     def __init__(self, df: pd.DataFrame):
         if df.empty:
-            raise ValueError('O DataFrame inicial não pode estar vazio para processamento.')
+            raise ValueError(_('The initial DataFrame cannot be empty for processing.'))
 
         self.df = df.copy()  # Trabalha com uma cópia para não alterar o original
 
@@ -24,7 +25,7 @@ class ProcessingService:
         Verifica se a primeira linha de dados tem pelo menos um valor
         nas colunas de agrupamento.
         """
-        logger.info('Validar os dados de entrada...')
+        logger.info(_('Validating initial data...'))
 
         # Pega a primeira linha do DataFrame (índice 0) e seleciona apenas as colunas de agrupamento
         first_row = self.df.iloc[0]
@@ -37,32 +38,32 @@ class ProcessingService:
 
         if is_all_null or is_all_empty_string:
             # Se todas as células de agrupamento na primeira linha estiverem vazias, levanta um erro.
-            error_message = (
-                'Validação falhou: A primeira linha de dados (linha 3 no Excel) '
-                'não pode ter todas as colunas de agrupamento vazias. '
-                f'Por favor, preencha pelo menos uma das seguintes colunas: {", ".join(GROUPING_COLUMNS)}'
-            )
+            error_message = _(
+                'Validation failed: The first data row (row 3 in Excel) '
+                'cannot have all grouping columns empty. '
+                'Please fill at least one of the following columns: {columns}'
+            ).format(columns=', '.join(GROUPING_COLUMNS))
             # Levantar um ValueError é apropriado aqui. Ele será capturado pelo bloco try/except no main.py.
             logger.error(error_message)
             raise ValueError(error_message)
 
     def _preprocess_data(self) -> None:
         """Prepara o DataFrame preenchendo os valores de agrupamento para baixo."""
-        logger.info('Pré-processar os dados (preenchimento de colunas de agrupamento)...')
+        logger.info(_('Preprocessing data (filling grouping columns downwards)...'))
         # Converte strings vazias para NaN para que ffill funcione
         self.df[GROUPING_COLUMNS] = self.df[GROUPING_COLUMNS].replace('', np.nan)
         # Preenche os valores para baixo
         self.df[GROUPING_COLUMNS] = self.df[GROUPING_COLUMNS].ffill()
         # Converte quaisquer NaNs restantes (ex: colunas totalmente vazias) para strings vazias
         self.df[GROUPING_COLUMNS] = self.df[GROUPING_COLUMNS].fillna('')
-        logger.info('Pré-processamento concluído.')
+        logger.info(_('Preprocessing completed.'))
 
     def _validate_group_consistency(self):
         """
         Valida a consistência dos grupos definidos pelo usuário.
         Para cada grupo em 'Group By', verifica se as colunas secundárias têm apenas um valor único.
         """
-        logger.info('Validar consistência dos grupos...')
+        logger.info(_('Validating group consistency...'))
 
         # Agrupa pelo 'Group By' já preenchido
         groups = self.df.groupby(PRIMARY_GROUP_COLUMN)
@@ -78,29 +79,32 @@ class ProcessingService:
                 inconsistent_groups = unique_counts[unique_counts > 1]
                 group_name = inconsistent_groups.index[0]
 
-                # Pega os valores que causaram a inconsistência
-                inconsistent_values = pd.Series(self.df.loc[self.df[PRIMARY_GROUP_COLUMN] == group_name, col]).unique()
+                # Filtra as linhas para obter um DataFrame temporário
+                inconsistent_df = self.df[self.df[PRIMARY_GROUP_COLUMN] == group_name]
 
-                error_message = (
-                    f"Erro de consistência de dados no grupo '{group_name}'.\n"
-                    f"A coluna '{col}' tem múltiplos valores ({list(inconsistent_values)}) "
-                    "dentro do mesmo grupo definido em 'Group By'. "
-                    'Por favor, corrija os dados ou crie um novo grupo.'
-                )
+                # Extrai a coluna (Series) desse DataFrame e obtém os valores únicos
+                inconsistent_values = inconsistent_df[col].unique()
+
+                error_message = _(
+                    "Data consistency error in group '{group_name}'.\n"
+                    "The column '{col}' has multiple values ({values}) "
+                    "within the same group defined in 'Group By'. "
+                    'Please correct the data or create a new group.'
+                ).format(group_name=group_name, col=col, values=list(inconsistent_values))
                 logger.error(error_message)
                 raise ValueError(error_message)
 
-        logger.info('Consistência dos grupos validada com sucesso.')
+        logger.info(_('Group consistency validated successfully.'))
 
     def _generate_automatic_groups(self) -> None:
         """Gera IDs de grupo sequenciais quando a coluna 'Group By' está vazia."""
-        logger.info('Modo: Geração automática de grupos.')
+        logger.info(_('Mode: Automatic group generation.'))
 
         # Cria um ID de grupo sequencial baseado na mudança de valores nas colunas secundárias
         group_starts = (self.df[SECONDARY_GROUP_COLUMNS] != self.df[SECONDARY_GROUP_COLUMNS].shift()).any(axis=1)
         group_ids = group_starts.cumsum()
         self.df[PRIMARY_GROUP_COLUMN] = group_ids
-        logger.info('Grupos automáticos gerados com sucesso.')
+        logger.info(_('Automatic groups generated successfully.'))
 
     def group_data(self) -> list[pd.DataFrame]:
         """
@@ -121,23 +125,23 @@ class ProcessingService:
 
         if user_defined_groups:
             # Grupos definidos pelo utilizador
-            logger.info('Modo: Grupos definidos pelo utilizador.')
+            logger.info(_('Mode: User-defined groups.'))
 
             # Executa a validação de consistência
             self._validate_group_consistency()
 
         else:
             # Grupos automáticos
-            logger.info('Modo: Grupos automáticos.')
+            logger.info(_('Mode: Automatic groups.'))
 
             self._generate_automatic_groups()
 
         # Agrupamento final
-        logger.info(f"Agrupar pela coluna: '{PRIMARY_GROUP_COLUMN}'...")
+        logger.info(_('Grouping by column: {column}...').format(column=PRIMARY_GROUP_COLUMN))
 
         grouped_data = self.df.groupby(PRIMARY_GROUP_COLUMN, sort=False)
         data_sets = [group_df for _, group_df in grouped_data]
 
-        logger.info(f'Dados divididos em {len(data_sets)} conjuntos sequenciais.')
+        logger.info(_('Data divided into {count} sequential sets.').format(count=len(data_sets)))
 
         return data_sets

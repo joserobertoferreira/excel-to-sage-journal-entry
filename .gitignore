@@ -7,9 +7,13 @@ wheels/
 *.egg-info
 output/
 deploy/
+excel/
 
 # Virtual environments
 .venv
 .env
 
 /logs
+/excel
+
+config.ini

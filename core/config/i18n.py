@@ -2,8 +2,8 @@ import gettext
 import locale
 import logging
 
-# Importa as configurações do nosso ficheiro de settings
-from .settings import DEFAULT_LANGUAGE, LOCALE_DIR, SUPPORTED_LANGUAGES
+from core.config.config import Config
+from core.config.settings import LOCALE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -13,26 +13,30 @@ def get_best_language() -> str:
     Determina a melhor língua a ser usada com base nas configurações do sistema
     e nas línguas suportadas pela aplicação.
     """
+    config = Config()
+
     try:
         # Tenta obter a língua do sistema (ex: 'pt_PT', 'en_US')
         system_lang, _ = locale.getdefaultlocale()
     except Exception:
         # Fallback se não conseguir obter a língua do sistema
-        system_lang = DEFAULT_LANGUAGE
+        system_lang = config.DEFAULT_LANGUAGE
 
-    if system_lang in SUPPORTED_LANGUAGES:
+    if system_lang and system_lang in config.SUPPORTED_LANGUAGES:
         logger.info(f"Língua do sistema '{system_lang}' encontrada e suportada.")
         return system_lang
 
     # Se a língua completa (ex: 'en_US') não estiver na lista,
     # tenta a versão curta (ex: 'en').
-    short_lang = system_lang.split('_')[0] if system_lang else DEFAULT_LANGUAGE
-    if short_lang in SUPPORTED_LANGUAGES:
+    short_lang = system_lang.split('_')[0] if system_lang else config.DEFAULT_LANGUAGE
+    if short_lang in config.SUPPORTED_LANGUAGES:
         logger.info(f"Língua do sistema '{system_lang}' não é suportada, a usar fallback para '{short_lang}'.")
         return short_lang
 
-    logger.warning(f"A língua do sistema '{system_lang}' não é suportada. A usar a língua padrão '{DEFAULT_LANGUAGE}'.")
-    return DEFAULT_LANGUAGE
+    logger.warning(
+        f"A língua do sistema '{system_lang}' não é suportada. A usar a língua padrão '{config.DEFAULT_LANGUAGE}'."
+    )
+    return config.DEFAULT_LANGUAGE
 
 
 # Lógica para carregar as traduções
