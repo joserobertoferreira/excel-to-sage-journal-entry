@@ -3,7 +3,7 @@ import hmac
 import time
 
 from core.config.config import Config
-from core.config.settings import EXCEL_API_KEY, EXCEL_API_SECRET, EXCEL_CLIENT_ID
+from core.config.settings import EXCEL_API_KEY
 
 
 def generate_auth_headers(config: Config, admin: bool) -> dict:
@@ -25,29 +25,31 @@ def generate_auth_headers(config: Config, admin: bool) -> dict:
 
     # Criar a mensagem a ser assinada
     if admin:
-        secret_key = EXCEL_API_SECRET
-        app_key = EXCEL_API_KEY
-        client_id = EXCEL_CLIENT_ID
+        auth_headers = {
+            'content-type': 'application/json',
+            'Accept': '*/*',
+            'X-Admin-Key': EXCEL_API_KEY,
+        }
     else:
         secret_key = config.API_SECRET
         app_key = config.API_KEY
         client_id = config.CLIENT_ID
 
-    message_to_sign = f'{app_key}{client_id}{timestamp}'
+        message_to_sign = f'{app_key}{client_id}{timestamp}'
 
-    # Gerar a assinatura HMAC
-    signature = hmac.new(
-        key=secret_key.encode('utf-8'), msg=message_to_sign.encode('utf-8'), digestmod=hashlib.sha256
-    ).hexdigest()
+        # Gerar a assinatura HMAC
+        signature = hmac.new(
+            key=secret_key.encode('utf-8'), msg=message_to_sign.encode('utf-8'), digestmod=hashlib.sha256
+        ).hexdigest()
 
-    # Montar e retornar o objeto de cabeçalhos de autenticação
-    auth_headers = {
-        'content-type': 'application/json',
-        'Accept': '*/*',
-        'X-App-Key': app_key,
-        'X-Client-Id': client_id,
-        'X-Timestamp': str(timestamp),
-        'X-Signature': signature,
-    }
+        # Montar e retornar o objeto de cabeçalhos de autenticação
+        auth_headers = {
+            'content-type': 'application/json',
+            'Accept': '*/*',
+            'X-App-Key': app_key,
+            'X-Client-Id': client_id,
+            'X-Timestamp': str(timestamp),
+            'X-Signature': signature,
+        }
 
     return auth_headers

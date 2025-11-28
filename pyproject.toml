@@ -25,6 +25,7 @@ select = ['I', 'F', 'E', 'W', 'PL', 'PT']
 ignore = [
   "PLC2701", # Ignora o "Private name import `_`"
   "PLR2004", # Ignora o "Too few arguments for function call"
+  "PLR0912", # Ignora o "Too many branches in function"
 ]
 
 [tool.ruff.format]

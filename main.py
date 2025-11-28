@@ -79,7 +79,7 @@ def run_create_process(excel_handler: ExcelHandler, config: Config) -> None:
     logger.info(_('Starting creation process'))
 
     # Ler os dados
-    raw_df = excel_handler.read_data_to_dataframe()
+    raw_df = excel_handler.read_data_to_create()
     if raw_df.empty:
         logger.warning(_('The data table is empty. Process interrupted.'))
         excel_handler.alert_user(_('The data table is empty.'), _('Warning'))
@@ -92,10 +92,18 @@ def run_create_process(excel_handler: ExcelHandler, config: Config) -> None:
     # Enviar para a API
     api_service = ApiService(config=config)
     all_results = []
+
+    # Feedback visual (barra de status do Excel)
+    if excel_handler.app:
+        excel_handler.app.screen_updating = False  # Opcional: Melhora performance
+
     for group_df in data_groups:
         api_response = api_service.create_journal_entry(group_df)
         result = {'indices': group_df.index, 'response': api_response}
         all_results.append(result)
+
+    if excel_handler.app:
+        excel_handler.app.screen_updating = True  # Reativa a atualização após o processamento
 
     # Escrever os resultados
     excel_handler.write_results_to_sheet(all_results)
@@ -105,12 +113,49 @@ def run_create_process(excel_handler: ExcelHandler, config: Config) -> None:
     excel_handler.alert_user(success_message, _('Success'))
 
 
-def run_status_check_process(excel_handler: ExcelHandler) -> None:
+def run_status_check_process(excel_handler: ExcelHandler, config: Config) -> None:
     """Executa o fluxo de verificação de status."""
     logger.info(_('Starting status check process'))
 
-    excel_handler.alert_user(_('Functionality not yet implemented.'), _('Information'))
-    pass
+    # Ler os dados
+    raw_df = excel_handler.read_data_to_update()
+    if raw_df.empty:
+        logger.warning(_('The data table is empty. Process interrupted.'))
+        excel_handler.alert_user(_('The data table is empty.'), _('Warning'))
+        return
+
+    # Enviar para a API
+    api_service = ApiService(config=config)
+    success_count = 0
+    total_count = len(raw_df)
+
+    logger.info(_('Found {total_count} documents to check.').format(total_count=total_count))
+
+    for _i, row in raw_df.iterrows():
+        doc_number = str(row['Document'])
+        row_idx = int(row['original_row_index'])
+
+        # Chama a API
+        status_result = api_service.get_journal_status(doc_number)
+
+        # Verifica se houve erro de comunicação
+        if status_result.get('success', True) is False:
+            error_msg = status_result.get('error', 'Unknown Error')
+            excel_handler.update_row_status(row_idx, new_status=None, message=error_msg)
+        else:
+            # Tenta obter o status específico deste documento
+            # A API retorna algo como { "DOC123": "Posted" }
+            current_status = status_result.get(doc_number)
+
+            if current_status:
+                excel_handler.update_row_status(row_idx, new_status=current_status, message='')
+                success_count += 1
+            else:
+                excel_handler.update_row_status(row_idx, new_status='Not Found', message='Document ID not found')
+
+    msg = _('Status update complete. {success}/{total} updated.').format(success=success_count, total=total_count)
+    logger.info(msg)
+    excel_handler.alert_user(msg, _('Process Complete'))
 
 
 def main() -> NoReturn:
@@ -118,18 +163,15 @@ def main() -> NoReturn:
     Ponto de entrada principal. Orquestra a execução, tratamento de erros
     e interação com o Excel.
     """
-    logger.info(_(f'Arguments received: {sys.argv}'))
-
     config = Config()
-
     excel_handler = None
+
     try:
         # Validação de argumentos
         if len(sys.argv) < 2:
             raise IndexError(_("No command provided. Expected 'auth', 'create', or 'status'."))
 
         command = sys.argv[1]
-        logger.info(f"Command: '{command}'")
 
         # Roteamento de comandos
         if command == 'auth':
@@ -140,6 +182,12 @@ def main() -> NoReturn:
 
             username = arg_username.strip('\'"')
             password = arg_password.strip('\'"')
+
+            logger.info(
+                _('Arguments received: {argument_0}, {argument_1}, {argument_2}').format(
+                    argument_0=command, argument_1=username, argument_2='*' * len(password)
+                )
+            )
 
             run_auth_process(username, password, config=config, config_folder=BASE_DIR)
         elif command in {'create', 'status'}:
@@ -156,7 +204,7 @@ def main() -> NoReturn:
             if command == 'create':
                 run_create_process(excel_handler, config=config)
             elif command == 'status':
-                run_status_check_process(excel_handler)
+                run_status_check_process(excel_handler, config=config)
             else:
                 logger.error(f'Comando desconhecido recebido: {command}')
                 if excel_handler:
@@ -197,7 +245,7 @@ def run_tests_locally() -> None:
 
     TEST_BASE_DIR = Path(__file__).resolve().parent
     test_sheet_index = 2
-    test_file_path = str(TEST_BASE_DIR / 'excel' / 'teste_pm.xlsm')
+    test_file_path = str(TEST_BASE_DIR / 'excel' / 'teste_sage.xlsm')
     test_config_path = TEST_BASE_DIR / 'config.ini'
 
     test_config = Config(config_filepath=test_config_path)
@@ -231,7 +279,7 @@ def run_tests_locally() -> None:
                 logger.error('ExcelHandler ou workbook não inicializado corretamente durante o teste de criação.')
 
         elif test_command == 'status':
-            run_status_check_process(excel_ctrl)
+            run_status_check_process(excel_ctrl, config=test_config)
             logger.info('Teste de verificação de status concluído!')
 
     except Exception:

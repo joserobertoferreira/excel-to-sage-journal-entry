@@ -39,8 +39,12 @@ class ApiService:
         dimensions_dict = {}
         for api_key, excel_col in self.dimensions.items():
             value = row.get(excel_col)
-            if pd.notna(value) and value:
-                dimensions_dict[api_key] = value
+            if pd.notna(value):
+                str_value = str(value).strip()
+
+                if str_value:
+                    dimensions_dict[api_key] = str_value
+
         return dimensions_dict
 
     def _create_line_item(self, row: pd.Series, header_data: pd.Series) -> dict:
@@ -53,11 +57,21 @@ class ApiService:
             dict: O dicionário formatado para a linha do lançamento.
         """
         # Campos Principais e Obrigatórios
-        account_code = str(int(row['Nominal Code'])) if pd.notna(row['Nominal Code']) else ''
+        try:
+            nominal_code = row['Nominal Code']
+            if pd.notna(nominal_code):
+                account_code = str(int(nominal_code)).strip()
+            else:
+                account_code = ''
+        except (ValueError, TypeError):
+            # Fallback caso venha texto na coluna de conta
+            account_code = str(row.get('Nominal Code', '')).strip()
 
-        line_description = (
-            row['Line Description'] if pd.notna(row['Line Description']) else header_data['Header Description']
-        )
+        line_desc_val = row.get('Line Description')
+        if pd.notna(line_desc_val) and str(line_desc_val).strip():
+            line_description = str(line_desc_val).strip()
+        else:
+            line_description = header_data['Header Description']
 
         line_dict = {
             'account': account_code,
@@ -129,7 +143,7 @@ class ApiService:
         variables: dict[str, Any],
         operation_name: str,
         authorization: bool = True,
-        excel: bool = False,
+        admin: bool = False,
     ) -> dict:
         """
         Executa uma query/mutação GraphQL genérica e trata a comunicação e os erros.
@@ -138,7 +152,7 @@ class ApiService:
             variables (dict): As variáveis para a operação.
             operation_name (str): O nome da operação GraphQL.
             authorization (bool): Indica se deve incluir cabeçalhos de autorização.
-            excel (bool): Indica se deve usar credenciais de administrador.
+            admin (bool): Indica se deve usar credenciais de administrador.
         Returns:
             dict: A resposta da API em formato JSON.
         Raises:
@@ -154,11 +168,9 @@ class ApiService:
         }
 
         if authorization:
-            auth_headers = generate_auth_headers(config=self.config, admin=excel)
+            auth_headers = generate_auth_headers(config=self.config, admin=admin)
         else:
             auth_headers = {'content-type': 'application/json', 'Accept': '*/*'}
-
-        # logger.info('Payload GraphQL: %s', json.dumps(payload, indent=2))
 
         try:
             response = requests.post(self.api_url, headers=auth_headers, data=json.dumps(payload), timeout=60)
@@ -232,32 +244,37 @@ class ApiService:
             'status': result.get('journalEntryStatus'),
         }
 
-    def get_journal_statuses(self, document_numbers: list[str]) -> dict:
-        """Busca o status de uma lista de documentos."""
-        logger.info(_('Checking status for {count} documents...').format(count=len(document_numbers)))
+    def get_journal_status(self, document_number: str) -> dict:
+        """
+        Busca o status do documento informado
+        Args:
+            document_number (str): O número do documento a ser verificado.
+        Returns:
+            dict: Um dicionário contendo o status do documento.
+        """
+        logger.info(_('Checking status for document "{document_number}"...').format(document_number=document_number))
 
         # A sua query de status virá aqui. Exemplo hipotético:
         query = """
-        query GetJournalStatuses($numbers: [String!]!) {
-          journalEntries(filter: { numbers: $numbers }) {
-            number
-            status
-          }
+        query GetJournalEntryStatus($input: JournalEntryInputUnique!) {
+            getJournalEntryStatus(input: $input) {
+                journalEntryNumber
+                journalEntryStatus
+                journalEntryType
+            }
         }
         """
 
-        variables = {'numbers': document_numbers}
+        variables = {'input': {'journalEntryNumber': document_number}}
 
-        response_data = self._execute_graphql(query, variables, 'GetJournalStatuses')
+        response_data = self._execute_graphql(query, variables, 'GetJournalEntryStatus')
 
-        # A sua lógica para processar a resposta da query de status virá aqui.
-        # Por exemplo, transformar a lista de resultados num dicionário para fácil acesso.
         if 'errors' in response_data:
-            # ... tratamento de erro ...
-            return {}
+            error_messages = [e.get('message') for e in response_data['errors']]
+            return {'success': False, 'error': '; '.join(error_messages)}
 
-        results = response_data.get('data', {}).get('journalEntries', [])
-        status_map = {entry['number']: entry['status'] for entry in results}
+        results = response_data.get('data', {}).get('getJournalEntryStatus', {})
+        status_map = {results.get('journalEntryNumber'): results.get('journalEntryStatus')}
         return status_map
 
     def _build_api_credential_input(self, username: str, password: str) -> dict:  # noqa: PLR6301
@@ -298,7 +315,6 @@ class ApiService:
                 appKey
                 appSecret
                 clientId
-                name
             }
         }
         """
@@ -306,7 +322,7 @@ class ApiService:
         variables = self._build_api_credential_input(username.lower(), password)
 
         # Executar a query com tratamento de erros
-        response_data = self._execute_graphql(query, variables, 'GetApiCredential', excel=True)
+        response_data = self._execute_graphql(query, variables, 'GetApiCredential', authorization=True, admin=True)
 
         # Processa a resposta específica desta mutação
         if 'errors' in response_data:
