@@ -52,4 +52,6 @@ def generate_auth_headers(config: Config, admin: bool) -> dict:
             'X-Signature': signature,
         }
 
+    auth_headers['X-excel-key'] = 'true'
+
     return auth_headers

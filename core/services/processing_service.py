@@ -1,147 +1,195 @@
 import logging
+from pathlib import Path
 
-import numpy as np
-import pandas as pd
-
+from core.config.config import Config
 from core.config.i18n import _
-from core.config.settings import GROUPING_COLUMNS, PRIMARY_GROUP_COLUMN, SECONDARY_GROUP_COLUMNS
+from core.handler.excel_handler import ExcelHandler
+from core.services.api_service import ApiService
+from core.services.validation_service import ValidationService
+from core.utils.utils import create_config_file
 
 logger = logging.getLogger(__name__)
 
 
 class ProcessingService:
     """
-    Encapsula toda a lógica de negócio para validar e transformar os dados lidos do Excel.
+    Orquestra os fluxos de trabalho principais da aplicação,
+    coordenando os diferentes serviços.
     """
 
-    def __init__(self, df: pd.DataFrame):
-        if df.empty:
-            raise ValueError(_('The initial DataFrame cannot be empty for processing.'))
+    def __init__(self, config: Config) -> None:
+        self.config = config
+        self.api_service = ApiService(config=self.config)
+        self.excel_handler: ExcelHandler | None = None
 
-        self.df = df.copy()  # Trabalha com uma cópia para não alterar o original
-
-    def _validate_initial_data(self):
+    def _get_excel_handler(self, handler_type: str = 'sheet', sheet_index: int = 2) -> ExcelHandler:
         """
-        Verifica se a primeira linha de dados tem pelo menos um valor
-        nas colunas de agrupamento.
-        """
-        logger.info(_('Validating initial data...'))
-
-        # Pega a primeira linha do DataFrame (índice 0) e seleciona apenas as colunas de agrupamento
-        first_row = self.df.iloc[0]
-        first_row_grouping_data = first_row[GROUPING_COLUMNS]
-
-        # .isnull() retorna True para NaN/None. .all() verifica se TODOS os valores são True.
-        # Também verificamos se todas são strings vazias, pois isso também é inválido.
-        is_all_null = first_row_grouping_data.isnull().all()
-        is_all_empty_string = (first_row_grouping_data == '').all()  # noqa: PLC1901
-
-        if is_all_null or is_all_empty_string:
-            # Se todas as células de agrupamento na primeira linha estiverem vazias, levanta um erro.
-            error_message = _(
-                'Validation failed: The first data row (row 3 in Excel) '
-                'cannot have all grouping columns empty. '
-                'Please fill at least one of the following columns: {columns}'
-            ).format(columns=', '.join(GROUPING_COLUMNS))
-            # Levantar um ValueError é apropriado aqui. Ele será capturado pelo bloco try/except no main.py.
-            logger.error(error_message)
-            raise ValueError(error_message)
-
-    def _preprocess_data(self) -> None:
-        """Prepara o DataFrame preenchendo os valores de agrupamento para baixo."""
-        logger.info(_('Preprocessing data (filling grouping columns downwards)...'))
-        # Converte strings vazias para NaN para que ffill funcione
-        self.df[GROUPING_COLUMNS] = self.df[GROUPING_COLUMNS].replace('', np.nan)
-        # Preenche os valores para baixo
-        self.df[GROUPING_COLUMNS] = self.df[GROUPING_COLUMNS].ffill()
-        # Converte quaisquer NaNs restantes (ex: colunas totalmente vazias) para strings vazias
-        self.df[GROUPING_COLUMNS] = self.df[GROUPING_COLUMNS].fillna('')
-        logger.info(_('Preprocessing completed.'))
-
-    def _validate_group_consistency(self):
-        """
-        Valida a consistência dos grupos definidos pelo usuário.
-        Para cada grupo em 'Group By', verifica se as colunas secundárias têm apenas um valor único.
-        """
-        logger.info(_('Validating group consistency...'))
-
-        # Agrupa pelo 'Group By' já preenchido
-        groups = self.df.groupby(PRIMARY_GROUP_COLUMN)
-
-        # Itera sobre as colunas que precisam ser consistentes
-        for col in SECONDARY_GROUP_COLUMNS:
-            # nunique() conta o número de valores únicos por grupo
-            unique_counts = groups[col].nunique()
-
-            # Se qualquer grupo tiver mais de 1 valor único, há uma inconsistência
-            if (unique_counts > 1).any():
-                # Encontra o primeiro grupo e valor inconsistente para a mensagem de erro
-                inconsistent_groups = unique_counts[unique_counts > 1]
-                group_name = inconsistent_groups.index[0]
-
-                # Filtra as linhas para obter um DataFrame temporário
-                inconsistent_df = self.df[self.df[PRIMARY_GROUP_COLUMN] == group_name]
-
-                # Extrai a coluna (Series) desse DataFrame e obtém os valores únicos
-                inconsistent_values = inconsistent_df[col].unique()
-
-                error_message = _(
-                    "Data consistency error in group '{group_name}'.\n"
-                    "The column '{col}' has multiple values ({values}) "
-                    "within the same group defined in 'Group By'. "
-                    'Please correct the data or create a new group.'
-                ).format(group_name=group_name, col=col, values=list(inconsistent_values))
-                logger.error(error_message)
-                raise ValueError(error_message)
-
-        logger.info(_('Group consistency validated successfully.'))
-
-    def _generate_automatic_groups(self) -> None:
-        """Gera IDs de grupo sequenciais quando a coluna 'Group By' está vazia."""
-        logger.info(_('Mode: Automatic group generation.'))
-
-        # Cria um ID de grupo sequencial baseado na mudança de valores nas colunas secundárias
-        group_starts = (self.df[SECONDARY_GROUP_COLUMNS] != self.df[SECONDARY_GROUP_COLUMNS].shift()).any(axis=1)
-        group_ids = group_starts.cumsum()
-        self.df[PRIMARY_GROUP_COLUMN] = group_ids
-        logger.info(_('Automatic groups generated successfully.'))
-
-    def group_data(self) -> list[pd.DataFrame]:
-        """
-        Agrupa o DataFrame pré-processado em uma lista de DataFrames menores,
-        um para cada conjunto de dados a ser enviado para a API.
+        Cria uma instância do ExcelHandler sob demanda.
+        args:
+            handler_type (str): Tipo de handler a criar ('app' ou 'sheet').
+            sheet_index (int): Índice da folha para o handler do tipo 'sheet'.
         Returns:
-            list[pd.DataFrame]: Lista de DataFrames agrupados.
+            ExcelHandler: Instância criada do ExcelHandler.
         """
-        self._validate_initial_data()
+        if handler_type == 'app':
+            return ExcelHandler.for_app_only()
+        return ExcelHandler.for_sheet(sheet_index=sheet_index)
 
-        # Substitui vazios por NaN e preenche TUDO para baixo.
-        self._preprocess_data()
+    def run_auth_process(self, username: str, password: str, config_folder: Path | None = None) -> None:
+        """
+        Autentica o utilizador, obtém credenciais e cria o ficheiro de configuração.
+        args:
+            username (str): Nome de utilizador para autenticação.
+            password (str): Palavra-passe para autenticação.
+            config (Config): Instância de configuração.
+            config_folder (Path | None): Pasta onde o ficheiro de configuração será salvo. Se None,
+            usa a pasta base da API.
+        Returns:
+            None
+        """
+        logger.info(_('Initiating credential generation process...'))
 
-        # Verificar se a coluna 'Group By' foi preenchida pelo usuário.
-        # .str.len() > 0 é uma forma segura de verificar se há strings não vazias
-        # E .any() verifica se pelo menos uma linha satisfaz a condição
-        user_defined_groups = self.df[PRIMARY_GROUP_COLUMN].astype(str).str.len().gt(0).any()
+        self.excel_handler = self._get_excel_handler(handler_type='app')
 
-        if user_defined_groups:
-            # Grupos definidos pelo utilizador
-            logger.info(_('Mode: User-defined groups.'))
+        try:
+            credentials = self.api_service.get_api_credentials(username, password)
 
-            # Executa a validação de consistência
-            self._validate_group_consistency()
+            if not credentials.get('success'):
+                error_msg = credentials.get('error', _('Authentication failed.'))
+                logger.error(error_msg)
+                self.excel_handler.alert_user(error_msg, _('Authentication Error'))
+                return
 
-        else:
-            # Grupos automáticos
-            logger.info(_('Mode: Automatic groups.'))
+            if config_folder:
+                base_dir = config_folder
+            else:
+                base_dir = self.api_service.base_dir
 
-            self._generate_automatic_groups()
+            create_config_file(config_path=base_dir, api_url=self.api_service.api_url, credentials=credentials)
 
-        # Agrupamento final
-        logger.info(_('Grouping by column: {column}...').format(column=PRIMARY_GROUP_COLUMN))
+            success_msg = _(
+                'Credentials generated successfully! Please restart the Excel file for the changes to take effect.'
+            )
+            self.excel_handler.alert_user(success_msg, _('Success'))
 
-        grouped_data = self.df.groupby(PRIMARY_GROUP_COLUMN, sort=False)
-        data_sets = [group_df for _, group_df in grouped_data]
+        except Exception as e:
+            # Se qualquer passo falhar, regista o erro e tenta alertar o utilizador
+            error_msg = _('An error occurred during credential generation: {error}').format(error=e)
+            logger.exception(error_msg)
+            if self.excel_handler:
+                self.excel_handler.alert_user(error_msg, _('Error'))
+            # Propaga a exceção para ser apanhada pelo 'main' e sair com código de erro
+            raise
 
-        logger.info(_('Data divided into {count} sequential sets.').format(count=len(data_sets)))
+    def run_create_process(self, sheet_index: int = 2, excel_handler_override: ExcelHandler | None = None) -> None:
+        """
+        Executa o fluxo completo de criação de lançamentos.
+        Recebe um ExcelHandler já inicializado.
+        args:
+            sheet_index (int): Índice da folha a processar.
+            excel_handler_override (ExcelHandler | None): Instância do ExcelHandler para sobrescrever a criação padrão.
+        Returns:
+            None
+        """
 
-        return data_sets
+        logger.info(_('Starting creation process'))
+
+        self.excel_handler = excel_handler_override or self._get_excel_handler(
+            handler_type='sheet', sheet_index=sheet_index
+        )
+
+        max_lines = self.api_service.get_max_journal_lines()
+
+        # Ler os dados
+        raw_df = self.excel_handler.read_data_to_create()
+        if raw_df.empty:
+            logger.warning(_('The data table is empty. Process interrupted.'))
+            self.excel_handler.alert_user(_('The data table is empty.'), _('Warning'))
+            return
+
+        # Processar os dados
+        validator = ValidationService(raw_df)
+        data_groups = validator.group_data(max_lines=max_lines)
+
+        # Enviar para a API
+        all_results = []
+
+        # Feedback visual (barra de status do Excel)
+        if self.excel_handler.app:
+            self.excel_handler.app.screen_updating = False  # Opcional: Melhora performance
+
+        for group_df in data_groups:
+            api_response = self.api_service.create_journal_entry(group_df)
+            result = {'indices': group_df.index, 'response': api_response}
+            all_results.append(result)
+
+        if self.excel_handler.app:
+            self.excel_handler.app.screen_updating = True  # Reativa a atualização após o processamento
+
+        # Escrever os resultados
+        self.excel_handler.write_results_to_sheet(all_results)
+
+        success_message = _('Process completed! {num_groups} groups sent.').format(num_groups=len(data_groups))
+        logger.info(success_message)
+        self.excel_handler.alert_user(success_message, _('Success'))
+
+    def run_status_check_process(
+        self, sheet_index: int = 2, excel_handler_override: ExcelHandler | None = None
+    ) -> None:
+        """Executa o fluxo de verificação de status."""
+        logger.info(_('Starting status check process'))
+
+        self.excel_handler = excel_handler_override or self._get_excel_handler(
+            handler_type='sheet', sheet_index=sheet_index
+        )
+
+        # Ler os dados
+        raw_df = self.excel_handler.read_data_to_update()
+        if raw_df.empty:
+            logger.warning(_('The data table is empty. Process interrupted.'))
+            self.excel_handler.alert_user(_('The data table is empty.'), _('Warning'))
+            return
+
+        # Enviar para a API
+        success_count = 0
+        total_count = len(raw_df)
+
+        logger.info(_('Found {total_count} documents to check.').format(total_count=total_count))
+
+        for _i, row in raw_df.iterrows():
+            doc_number = str(row['Document'])
+            row_idx = int(row['original_row_index'])
+
+            # Chama a API
+            status_result = self.api_service.get_journal_status(doc_number)
+
+            # Verifica se houve erro de comunicação
+            if status_result.get('success', True) is False:
+                error_msg = status_result.get('error', 'Unknown Error')
+                self.excel_handler.update_row_status(row_idx, new_status=None, message=error_msg)
+            else:
+                # Tenta obter o status específico deste documento
+                # A API retorna algo como { "DOC123": "Posted" }
+                current_status = status_result.get(doc_number)
+
+                if current_status:
+                    self.excel_handler.update_row_status(row_idx, new_status=current_status, message='')
+                    success_count += 1
+                else:
+                    self.excel_handler.update_row_status(
+                        row_idx, new_status='Not Found', message='Document ID not found'
+                    )
+
+        msg = _('Status update complete. {success}/{total} updated.').format(success=success_count, total=total_count)
+        logger.info(msg)
+        self.excel_handler.alert_user(msg, _('Process Complete'))
+
+    def alert_user_critical_error(self, message: str):
+        """
+        Alerta o utilizador sobre um erro crítico.
+        args:
+            message (str): Mensagem de erro a ser exibida.
+        """
+        if not self.excel_handler:
+            self.excel_handler = self._get_excel_handler('app')
+        self.excel_handler.alert_user(message, _('Critical Error'))

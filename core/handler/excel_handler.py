@@ -10,9 +10,11 @@ from core.config.settings import (
     END_CELL,
     END_FEEDBACK_CELL,
     EXPECTED_COLUMNS,
+    FEEDBACK_DETAIL_COLUMNS,
+    FEEDBACK_DIMENSION_COLUMNS,
+    FEEDBACK_HEADER_COLUMNS,
     START_CELL,
     START_FEEDBACK_CELL,
-    STATUS_FEEDBACK_CELL,
 )
 
 logger = logging.getLogger(__name__)
@@ -191,6 +193,40 @@ class ExcelHandler:
         logger.debug(_('Last data row found at row: {last_row}').format(last_row=last_row_found))
         return last_row_found
 
+    def count_processable_rows(self) -> int:
+        """
+        Lê e filtra os dados para contar quantas linhas são elegíveis para processamento.
+        É uma versão mais leve do 'read_data_to_dataframe'.
+        """
+        if not self.sheet:
+            error_msg = _('Cannot calculate number of processable rows because no sheet is selected.')
+            logger.error(error_msg)
+            raise AttributeError(error_msg)
+
+        logger.info(_('Counting processable rows in the sheet...'))
+
+        start_row = 3
+        last_row = self.find_last_row()
+
+        if last_row < start_row:
+            return 0
+
+        data_range_str = f'{START_CELL}{start_row - 1}:{END_CELL}{last_row}'
+        data_df = self.sheet.range(data_range_str).options(pd.DataFrame, index=False).value
+
+        if data_df is None or data_df.empty:
+            return 0
+
+        data_df.columns = EXPECTED_COLUMNS
+
+        condition_nominal_code = data_df['Nominal Code'].notna()
+        condition_is_locked = pd.to_numeric(data_df['_isLocked'], errors='coerce').fillna(0) == 0
+
+        count = (condition_nominal_code & condition_is_locked).sum()
+
+        logger.info(_('{count} processable rows found.').format(count=count))
+        return int(count)
+
     def read_data_to_create(self) -> pd.DataFrame:
         """
         Lê um bloco de dados predefinido e filtra apenas as linhas elegíveis
@@ -299,7 +335,9 @@ class ExcelHandler:
             return pd.DataFrame()
 
         # Lê as colunas B (Document) e C (Status).
-        data_range_str = f'{START_FEEDBACK_CELL}{start_row - 1}:{STATUS_FEEDBACK_CELL}{last_row}'
+        data_range_str = (
+            f'{FEEDBACK_HEADER_COLUMNS["Document"]}{start_row - 1}:{FEEDBACK_HEADER_COLUMNS["Status"]}{last_row}'
+        )
 
         # Lê para DataFrame (Header=1 assume que a linha 2 é cabeçalho)
         df = self.sheet.range(data_range_str).options(pd.DataFrame, index=False).value
@@ -343,11 +381,11 @@ class ExcelHandler:
         try:
             # Escreve o Status na Coluna C (3ª coluna)
             if new_status is not None:
-                self.sheet.range(f'{STATUS_FEEDBACK_CELL}{row_index}').value = new_status
+                self.sheet.range(f'{FEEDBACK_HEADER_COLUMNS["Status"]}{row_index}').value = new_status
 
-            # Se houver mensagem de erro/info, escreve na Coluna D
+            # Se houver mensagem de erro/info, escreve na Coluna D (Warning)
             if message is not None:
-                self.sheet.range(f'{END_FEEDBACK_CELL}{row_index}').value = message
+                self.sheet.range(f'{FEEDBACK_HEADER_COLUMNS["Warning"]}{row_index}').value = message
 
         except Exception as e:
             logger.error(_('Failed to write status to row {row_index}: {e}').format(row_index=row_index, e=e))
@@ -355,7 +393,14 @@ class ExcelHandler:
     def write_results_to_sheet(self, results_list: list[dict[str, Any]]) -> None:
         """
         Escreve os resultados do processamento da API de volta na folha.
-        Atualiza as colunas 'Document', 'Status' e 'Warning'.
+        O feedback (Document, Status) é escrito apenas na primeira linha de cada grupo.
+        A flag de bloqueio (_isLocked) é escrita em todas as linhas do grupo.
+        Args:
+            results_list (list[dict]): Lista de resultados a serem escritos.
+        Throws:
+            AttributeError: Se a folha não estiver selecionada.
+        Returns:
+            None
         """
         if not self.wb:
             logger.error(_('Cannot save because no workbook is active.'))
@@ -384,21 +429,45 @@ class ExcelHandler:
 
         # Preenche as colunas de resultado com os dados.
         logger.info(_('Writing all results in bulk to the sheet...'))
+
         for result in results_list:
             response = result['response']
+            indices = result.get('indices')
 
-            if response['success']:
-                values = [response.get('document'), response.get('status'), '']
-                lock_value = 1  # Marca como bloqueado
-            else:
+            if indices is None or indices.empty:  # Segurança extra
+                continue
+
+            # Limpa os valores antigos antes de escrever novos
+            first_index = indices[0]
+            first_excel_row = first_index + 3
+
+            self._clear(first_row=first_excel_row)
+
+            if not response['success']:
                 values = [_('ERROR'), _('FAILURE'), response.get('error')]
-                lock_value = 0  # Mantém desbloqueado
 
-            for df_index in result['indices']:
+                self.sheet.range(f'{START_FEEDBACK_CELL}{first_excel_row}').value = values
+                self.sheet.range(f'{END_CELL}{first_excel_row}').value = 0
+
+            journal_entry = response.get('result', {})
+            if not journal_entry:
+                logger.warning(_('No journal entry data found in the response. Skipping result writing.'))
+                continue
+
+            # Escreve o feedback APENAS na PRIMEIRA linha do grupo
+            self._write_header(excel_row=first_excel_row, journal_entry=journal_entry)
+
+            # Mapeia os índices do DataFrame para as linhas da API para reconciliação
+            api_lines = journal_entry.get('journalEntryLines', [])
+
+            for i, df_index in enumerate(indices):
                 excel_row = df_index + 3
+                api_line = api_lines[i]
 
-                self.sheet.range(f'{START_FEEDBACK_CELL}{excel_row}').value = values
-                self.sheet.range(f'{END_CELL}{excel_row}').value = lock_value
+                self._write_detail(excel_row=excel_row, line_data=api_line)
+
+                # Atualiza _isLocked
+                self.sheet.range(f'{END_CELL}{excel_row}').value = 1
 
         logger.info(_('Bulk write completed.'))
 
@@ -416,3 +485,91 @@ class ExcelHandler:
                 ),
                 _('Error Saving File'),
             )
+
+    def _write_detail(self, excel_row: int, line_data: dict[str, Any]) -> None:
+        """
+        Escreve os detalhes das linhas de feedback na folha.
+        Args:
+            excel_row (int): A linha do Excel onde os detalhes serão escritos.
+            line_data (dict): O dicionário contendo os dados da linha.
+        """
+
+        if not self.sheet:
+            return
+
+        logger.info(_('Writing detailed feedback to Excel row {first_row}...').format(first_row=excel_row))
+
+        for api_key, excel_col in FEEDBACK_DETAIL_COLUMNS.items():
+            self.sheet.range(f'{excel_col}{excel_row}').value = line_data.get(api_key)
+
+        # Pega as dimensões retornadas pela API para esta linha
+        api_dims = line_data.get('analyticalLines', [{}])[0].get('dimensions', {})
+
+        self._write_dimension_detail(excel_row, api_dims)
+
+    def _write_dimension_detail(self, excel_row: int, dimension_data: dict[str, Any]) -> None:
+        """
+        Escreve os detalhes das dimensões de feedback na folha.
+        Args:
+            excel_row (int): A linha do Excel onde os detalhes serão escritos.
+            dimension_data (dict): O dicionário contendo os dados das dimensões.
+        """
+
+        if not self.sheet:
+            return
+
+        logger.info(_('Writing detailed feedback to Excel row {first_row}...').format(first_row=excel_row))
+
+        for api_key, excel_col in FEEDBACK_DIMENSION_COLUMNS.items():
+            self.sheet.range(f'{excel_col}{excel_row}').value = dimension_data.get(api_key)
+
+    def _write_header(self, excel_row: int, journal_entry: dict[str, Any]) -> None:
+        """
+        Escreve o cabeçalho das colunas de feedback na folha.
+        Args:
+            excel_row (int): A linha do Excel onde o cabeçalho será escrito.
+            journal_entry (dict): O dicionário contendo os dados da entrada do diário.
+        """
+
+        if not self.sheet:
+            return
+
+        logger.info(_('Writing feedback for group to Excel row {first_row}...').format(first_row=excel_row))
+
+        # Feedback principal
+        self.sheet.range(f'{FEEDBACK_HEADER_COLUMNS["Document"]}{excel_row}').value = journal_entry.get(
+            'journalEntryNumber'
+        )
+        self.sheet.range(f'{FEEDBACK_HEADER_COLUMNS["Status"]}{excel_row}').value = journal_entry.get(
+            'journalEntryStatus'
+        )
+        self.sheet.range(f'{FEEDBACK_HEADER_COLUMNS["Warning"]}{excel_row}').value = ''  # Limpa o aviso
+
+        # Dados de agrupamento confirmados pela API
+        self.sheet.range(f'{FEEDBACK_HEADER_COLUMNS["Site"]}{excel_row}').value = journal_entry.get('site')
+        self.sheet.range(f'{FEEDBACK_HEADER_COLUMNS["Entry Type"]}{excel_row}').value = journal_entry.get(
+            'journalEntryType'
+        )
+        accounting_date = journal_entry.get('accountingDate')
+        if accounting_date:
+            date_obj = pd.to_datetime(accounting_date, errors='coerce')
+            self.sheet.range(f'{FEEDBACK_HEADER_COLUMNS["AccountingDate"]}{excel_row}').value = date_obj.to_pydatetime()
+        else:
+            self.sheet.range(f'{FEEDBACK_HEADER_COLUMNS["AccountingDate"]}{excel_row}').value = ''
+        self.sheet.range(f'{FEEDBACK_HEADER_COLUMNS["Curr"]}{excel_row}').value = journal_entry.get(
+            'transactionCurrency'
+        )
+
+    def _clear(self, first_row: int) -> None:
+        """
+        Limpa os conteúdos das colunas de feedback a partir de uma linha específica.
+        Args:
+            first_row (int): A linha inicial a partir da qual os conteúdos serão limpos.
+        """
+
+        if not self.sheet:
+            return
+
+        # Escreve o bloco [Doc, Status, Warning]
+        feedback_range = self.sheet.range(f'{START_FEEDBACK_CELL}{first_row}:{END_FEEDBACK_CELL}{first_row}')
+        feedback_range.clear_contents()  # Limpa antes de escrever

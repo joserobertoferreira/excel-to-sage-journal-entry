@@ -7,7 +7,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # FALLBACK_SERVER_BASE_ADDRESS = 'http://cfg-uks-x3-03:8241/graphql'
-FALLBACK_SERVER_BASE_ADDRESS = 'http://localhost:3000/graphql'
+FALLBACK_SERVER_BASE_ADDRESS: str = 'http://localhost:3000/graphql'
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 IS_FROZEN: bool = getattr(sys, 'frozen', False)
@@ -42,17 +42,44 @@ DEFAULT_LEGACY_DATETIME: datetime = datetime(1753, 1, 1)
 # Excel spreadsheet settings
 START_CELL: str = 'A'  # The starting cell of the data range
 END_CELL: str = 'AD'  # The ending cell of the data range
+
+# Feedback range settings
 START_FEEDBACK_CELL: str = 'B'  # The starting cell of the feedback range
-STATUS_FEEDBACK_CELL: str = 'C'  # The status cell of the feedback range
 END_FEEDBACK_CELL: str = 'D'  # The ending cell of the feedback range
+
+FEEDBACK_HEADER_COLUMNS: dict[str, str] = {
+    'Document': 'B',
+    'Status': 'C',
+    'Warning': 'D',
+    'Site': 'E',
+    'Entry Type': 'F',
+    'AccountingDate': 'G',
+    'VAT date': 'H',
+    'Curr': 'L',
+}
+
+FEEDBACK_DETAIL_COLUMNS: dict[str, str] = {
+    'businessPartner': 'Q',
+    'tax': 'R',
+}
+
+FEEDBACK_DIMENSION_COLUMNS: dict[str, str] = {
+    'fixture': 'S',
+    'broker': 'T',
+    'department': 'U',
+    'location': 'V',
+    'type': 'W',
+    'product': 'X',
+    'analysis': 'Y',
+}
 
 # Columns used to fill down values and group the data
 PRIMARY_GROUP_COLUMN: str = 'Group By'
-SECONDARY_GROUP_COLUMNS: list = ['Site', 'Entry Type', 'AccountingDate', 'Curr']
-GROUPING_COLUMNS: list = [PRIMARY_GROUP_COLUMN] + SECONDARY_GROUP_COLUMNS
+SECONDARY_GROUP_COLUMNS: list[str] = ['Site', 'Entry Type', 'AccountingDate', 'Header Description', 'Curr']
+GROUPING_COLUMNS: list[str] = [PRIMARY_GROUP_COLUMN] + SECONDARY_GROUP_COLUMNS
 
 # Exact names of all expected columns in the spreadsheet
-EXPECTED_COLUMNS: list = [
+EXPECTED_COLUMNS: list[str] = [
     'Group By',
     'Document',
     'Status',
@@ -78,15 +105,37 @@ EXPECTED_COLUMNS: list = [
     'TYP',
     'PDT',
     'ANA',
-    'Quantity',
     'Debit',
     'Credit',
+    'Quantity',
     'Free Reference',
     '_isLocked',
 ]
 
+COLUMNS_TO_UPPERCASE: list[str] = [
+    'Site',
+    'Entry Type',
+    'Curr',
+    'Collective',
+    'BP',
+    'Tax',
+    'FIX',
+    'BRK',
+    'DEP',
+    'LOC',
+    'TYP',
+    'PDT',
+    'ANA',
+]
+
+DATE_COLUMNS: list[str] = [
+    'AccountingDate',
+    'VAT date',
+    'Reversing Date',
+]
+
 # API settings
-DIMENSIONS_MAPPING: dict = {
+DIMENSIONS_MAPPING: dict[str, str] = {
     'fixture': 'FIX',
     'broker': 'BRK',
     'department': 'DEP',

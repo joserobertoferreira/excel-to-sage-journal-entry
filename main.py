@@ -8,154 +8,10 @@ from core.config.i18n import _
 from core.config.logging import setup_logging
 from core.config.settings import BASE_DIR
 from core.handler.excel_handler import ExcelHandler
-from core.services.api_service import ApiService
 from core.services.processing_service import ProcessingService
-from core.utils.utils import create_config_file
 
 setup_logging()
 logger = logging.getLogger(__name__)
-
-
-def run_auth_process(username: str, password: str, config: Config, config_folder: Path | None = None) -> None:
-    """
-    Autentica o utilizador, obtém credenciais e cria o ficheiro de configuração.
-    args:
-        username (str): Nome de utilizador para autenticação.
-        password (str): Palavra-passe para autenticação.
-        config (Config): Instância de configuração.
-        config_folder (Path | None): Pasta onde o ficheiro de configuração será salvo. Se None, usa a pasta base da API.
-    Returns:
-        None
-    """
-    logger.info(_('Initiating credential generation process...'))
-
-    excel_app_handler = None
-    try:
-        # Usa o construtor 'for_app_only' para interagir com o Excel sem uma folha específica
-        excel_app_handler = ExcelHandler.for_app_only()
-
-        api_service = ApiService(config=config)
-        credentials = api_service.get_api_credentials(username, password)
-
-        if not credentials.get('success'):
-            error_msg = credentials.get('error', _('Authentication failed.'))
-            logger.error(error_msg)
-            excel_app_handler.alert_user(error_msg, _('Authentication Error'))
-            return
-
-        if config_folder:
-            base_dir = config_folder
-        else:
-            base_dir = api_service.base_dir
-
-        create_config_file(config_path=base_dir, api_url=api_service.api_url, credentials=credentials)
-
-        success_msg = _(
-            'Credentials generated successfully! Please restart the Excel file for the changes to take effect.'
-        )
-        excel_app_handler.alert_user(success_msg, _('Success'))
-
-    except Exception as e:
-        # Se qualquer passo falhar, regista o erro e tenta alertar o utilizador
-        error_msg = _('An error occurred during credential generation: {error}').format(error=e)
-        logger.exception(error_msg)
-        if excel_app_handler:
-            excel_app_handler.alert_user(error_msg, _('Error'))
-        # Propaga a exceção para ser apanhada pelo 'main' e sair com código de erro
-        raise
-
-
-def run_create_process(excel_handler: ExcelHandler, config: Config) -> None:
-    """
-    Executa o fluxo completo de criação de lançamentos.
-    Recebe um ExcelHandler já inicializado.
-    args:
-        excel_handler (ExcelHandler): Instância do ExcelHandler para manipular o Excel.
-        config (Config): Instância de configuração.
-    Returns:
-        None
-    """
-
-    logger.info(_('Starting creation process'))
-
-    # Ler os dados
-    raw_df = excel_handler.read_data_to_create()
-    if raw_df.empty:
-        logger.warning(_('The data table is empty. Process interrupted.'))
-        excel_handler.alert_user(_('The data table is empty.'), _('Warning'))
-        return
-
-    # Processar os dados
-    processor = ProcessingService(raw_df)
-    data_groups = processor.group_data()
-
-    # Enviar para a API
-    api_service = ApiService(config=config)
-    all_results = []
-
-    # Feedback visual (barra de status do Excel)
-    if excel_handler.app:
-        excel_handler.app.screen_updating = False  # Opcional: Melhora performance
-
-    for group_df in data_groups:
-        api_response = api_service.create_journal_entry(group_df)
-        result = {'indices': group_df.index, 'response': api_response}
-        all_results.append(result)
-
-    if excel_handler.app:
-        excel_handler.app.screen_updating = True  # Reativa a atualização após o processamento
-
-    # Escrever os resultados
-    excel_handler.write_results_to_sheet(all_results)
-
-    success_message = _('Creation process completed! {num_groups} groups sent.').format(num_groups=len(data_groups))
-    logger.info(success_message)
-    excel_handler.alert_user(success_message, _('Success'))
-
-
-def run_status_check_process(excel_handler: ExcelHandler, config: Config) -> None:
-    """Executa o fluxo de verificação de status."""
-    logger.info(_('Starting status check process'))
-
-    # Ler os dados
-    raw_df = excel_handler.read_data_to_update()
-    if raw_df.empty:
-        logger.warning(_('The data table is empty. Process interrupted.'))
-        excel_handler.alert_user(_('The data table is empty.'), _('Warning'))
-        return
-
-    # Enviar para a API
-    api_service = ApiService(config=config)
-    success_count = 0
-    total_count = len(raw_df)
-
-    logger.info(_('Found {total_count} documents to check.').format(total_count=total_count))
-
-    for _i, row in raw_df.iterrows():
-        doc_number = str(row['Document'])
-        row_idx = int(row['original_row_index'])
-
-        # Chama a API
-        status_result = api_service.get_journal_status(doc_number)
-
-        # Verifica se houve erro de comunicação
-        if status_result.get('success', True) is False:
-            error_msg = status_result.get('error', 'Unknown Error')
-            excel_handler.update_row_status(row_idx, new_status=None, message=error_msg)
-        else:
-            # Tenta obter o status específico deste documento
-            # A API retorna algo como { "DOC123": "Posted" }
-            current_status = status_result.get(doc_number)
-
-            if current_status:
-                excel_handler.update_row_status(row_idx, new_status=current_status, message='')
-                success_count += 1
-            else:
-                excel_handler.update_row_status(row_idx, new_status='Not Found', message='Document ID not found')
-
-    msg = _('Status update complete. {success}/{total} updated.').format(success=success_count, total=total_count)
-    logger.info(msg)
-    excel_handler.alert_user(msg, _('Process Complete'))
 
 
 def main() -> NoReturn:
@@ -164,7 +20,7 @@ def main() -> NoReturn:
     e interação com o Excel.
     """
     config = Config()
-    excel_handler = None
+    processing_service = ProcessingService(config=config)
 
     try:
         # Validação de argumentos
@@ -177,6 +33,7 @@ def main() -> NoReturn:
         if command == 'auth':
             if len(sys.argv) < 3:
                 raise IndexError(_('Authentication command requires username and password.'))
+
             arg_username = sys.argv[2]
             arg_password = sys.argv[3]
 
@@ -189,7 +46,8 @@ def main() -> NoReturn:
                 )
             )
 
-            run_auth_process(username, password, config=config, config_folder=BASE_DIR)
+            processing_service.run_auth_process(username, password, config_folder=BASE_DIR)
+
         elif command in {'create', 'status'}:
             if len(sys.argv) < 2:
                 raise IndexError(_("Command '{command}' requires a sheet index.").format(command=command))
@@ -198,26 +56,19 @@ def main() -> NoReturn:
             if not config.API_KEY or not config.CLIENT_ID:
                 raise PermissionError(_('API credentials not found. Please run "Generate Credentials" first.'))
 
-            # Usa o construtor 'for_sheet' para se conectar à folha correta
-            excel_handler = ExcelHandler.for_sheet(sheet_index=2)
-
             if command == 'create':
-                run_create_process(excel_handler, config=config)
+                processing_service.run_create_process()
             elif command == 'status':
-                run_status_check_process(excel_handler, config=config)
-            else:
-                logger.error(f'Comando desconhecido recebido: {command}')
-                if excel_handler:
-                    excel_handler.alert_user(f"Unknown command: '{command}'", _('Error'))
+                processing_service.run_status_check_process()
         else:
-            logger.error(_('Unknown command received: {command}').format(command=command))
-            # Tenta alertar o utilizador, criando um handler de app temporário
-            ExcelHandler.for_app_only().alert_user(
-                _("Unknown command: '{command}'").format(command=command), _('Error')
-            )
+            error_message = _('Unknown command received: {command}').format(command=command)
+            logger.error(error_message)
+            # # Tenta alertar o utilizador, criando um handler de app temporário
+            processing_service.alert_user_critical_error(error_message)
 
         logger.info(_('Main process completed successfully.'))
         sys.exit(0)  # Termina com código de sucesso
+
     except Exception as e:
         # Centralized and robust error handling
         logger.exception(_('!!! A CRITICAL ERROR OCCURRED IN THE MAIN FLOW !!!'))
@@ -228,8 +79,7 @@ def main() -> NoReturn:
             'An unexpected error occurred. Please check the "logs" folder for details.\n\nError: {error}'
         ).format(error=e)
 
-        handler_to_alert = excel_handler if excel_handler else ExcelHandler.for_app_only()
-        handler_to_alert.alert_user(error_message, _('Critical Error'))
+        processing_service.alert_user_critical_error(error_message)
 
         sys.exit(1)  # Garante que o VBA saiba que houve uma falha
 
@@ -256,31 +106,32 @@ def run_tests_locally() -> None:
     excel_app_for_testing = None
     excel_ctrl = None
     try:
-        # for_testing agora retorna uma tupla (controlador, app)
-        # Desempacotamos os dois valores em variáveis separadas
-        excel_ctrl, excel_app_for_testing = ExcelHandler.for_testing(
-            filepath=test_file_path, sheet_index=test_sheet_index
-        )
+        processing_service = ProcessingService(config=test_config)
 
         if test_command == 'auth':
             if len(sys.argv) < 4:
                 raise IndexError(_('Authentication command requires username and password.'))
             username = sys.argv[2]
             password = sys.argv[3]
-            run_auth_process(username, password, config=test_config, config_folder=TEST_BASE_DIR / 'excel')
-        elif test_command == 'create':
-            run_create_process(excel_ctrl, config=test_config)
+            processing_service.run_auth_process(username, password, config_folder=TEST_BASE_DIR / 'excel')
+
+        elif test_command in {'create', 'status'}:
+            excel_ctrl, excel_app_for_testing = ExcelHandler.for_testing(
+                filepath=test_file_path, sheet_index=test_sheet_index
+            )
+
+            if test_command == 'create':
+                processing_service.run_create_process(excel_handler_override=excel_ctrl)
+            elif test_command == 'status':
+                processing_service.run_status_check_process(excel_handler_override=excel_ctrl)
+                logger.info('Teste de verificação de status concluído!')
 
             if excel_ctrl and excel_ctrl.wb:
-                # Salva o resultado do teste de criação
                 excel_ctrl.wb.save()
-                logger.info(f"Teste de criação concluído! O ficheiro '{test_file_path}' foi atualizado.")
-            else:
-                logger.error('ExcelHandler ou workbook não inicializado corretamente durante o teste de criação.')
+                logger.info(f"Teste concluído! O ficheiro '{test_file_path}' foi atualizado.")
 
-        elif test_command == 'status':
-            run_status_check_process(excel_ctrl, config=test_config)
-            logger.info('Teste de verificação de status concluído!')
+        else:
+            logger.error('ExcelHandler ou workbook não inicializado corretamente durante o teste de criação.')
 
     except Exception:
         logger.exception('Ocorreu um erro durante o teste local.')

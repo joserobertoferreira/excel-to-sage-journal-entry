@@ -215,8 +215,28 @@ class ApiService:
         query = """
         mutation CreateJournalEntry($input: CreateJournalEntryInput!) {
           createJournalEntry(input: $input) {
+            journalEntryType
             journalEntryNumber
             journalEntryStatus
+            accountingDate
+            site
+            transactionCurrency
+            journalEntryLines {
+                account
+                businessPartner
+                tax
+                analyticalLines {
+                    dimensions {
+                        fixture
+                        broker
+                        department
+                        location
+                        type
+                        product
+                        analysis
+                    }
+                }
+            }
           }
         }
         """
@@ -240,8 +260,7 @@ class ApiService:
 
         return {
             'success': True,
-            'document': result.get('journalEntryNumber'),
-            'status': result.get('journalEntryStatus'),
+            'result': result,
         }
 
     def get_journal_status(self, document_number: str) -> dict:
@@ -394,3 +413,39 @@ class ApiService:
         logger.info(_('Credentials for user {username} successfully created').format(username=username.lower()))
 
         return {'success': True, **response_data}
+
+    def get_max_journal_lines(self) -> int:
+        """
+        Busca o limite máximo de linhas permitido para um lançamento a partir do ERP.
+        Retorna um número muito grande em caso de falha para não bloquear o processo.
+        """
+        logger.info(_('Fetching max journal line limit from ERP...'))
+
+        # --- Adapte esta query para a sua API ---
+        query = """
+        query GetActivityCodeDimension($input: GetActivityCodeDimensionInput!) {
+            getActivityCodeDimension(input: $input) {
+                screenSize
+            }
+        }
+        """
+
+        variables = {'input': {'activityCode': 'GAS'}}
+
+        operation_name = 'GetActivityCodeDimension'
+
+        response_data = self._execute_graphql(query, variables, operation_name, authorization=True, admin=True)
+
+        if 'errors' in response_data or 'data' not in response_data:
+            logger.warning(_('Could not fetch max line limit. A default large limit will be used.'))
+            # Retorna um número muito grande para que a validação passe em caso de erro de API
+            return 999999999
+
+        try:
+            # Navega pela resposta para encontrar o valor
+            limit = int(response_data['data']['getActivityCodeDimension']['screenSize'])
+            logger.info(_('Max line limit fetched successfully: {limit}').format(limit=limit))
+            return limit
+        except (TypeError, KeyError, ValueError):
+            logger.warning(_('Could not parse max line limit from API response. A default large limit will be used.'))
+            return 999999999

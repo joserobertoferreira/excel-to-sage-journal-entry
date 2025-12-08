@@ -15,5 +15,6 @@ excel/
 
 /logs
 /excel
+/core/logs
 
 config.ini

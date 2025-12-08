@@ -31,7 +31,7 @@ class Config:
         self.CLIENT_ID: str = ''
         self.PRODUCTION: bool = False
         self.DEBUG: bool = True
-        self.DEFAULT_LANGUAGE: str = 'en'
+        self.DEFAULT_LANGUAGE: str = 'pt_PT'
         self.SUPPORTED_LANGUAGES: list = ['en', 'pt_PT']
 
         # Carrega as configurações na inicialização
